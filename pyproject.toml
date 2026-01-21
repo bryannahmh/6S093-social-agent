@@ -1,0 +1,9 @@
+[project]
+name = "social-agent"
+version = "0.1.0"
+dependencies = [
+  "python-dotenv",
+  "requests",
+  "pydantic",
+  "openai",
+]
