@@ -7,4 +7,5 @@ dependencies = [
   "pydantic",
   "openai",
   "replicate",
+  "python-telegram-bot",
 ]
