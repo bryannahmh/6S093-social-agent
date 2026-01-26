@@ -41,13 +41,23 @@ class ReplySet(BaseModel):
     replies: List[Reply]
 
 def generate_replies(brand_docs: str, posts: list[dict]) -> ReplySet:
+    """
+    Generate replies to Mastodon posts using brand context.
+    
+    Args:
+        brand_docs: Brand context (can be from RAG retrieval or full docs)
+        posts: List of post dictionaries with 'id' and 'content' keys
+    
+    Returns:
+        ReplySet with generated replies
+    """
     formatted_posts = "\n\n".join(
         f"POST ID: {p['id']}\nCONTENT: {p['content']}"
         for p in posts
     )
 
     prompt = f"""
-BRAND DOCUMENTS:
+RELEVANT BRAND CONTEXT (from knowledge base):
 {brand_docs}
 
 MASTODON POSTS:
@@ -60,6 +70,7 @@ Rules:
 - Be kind, thoughtful, and non-spammy
 - Match the brand voice
 - Do NOT repeat marketing language
+- Use the retrieved context to inform your replies, but don't quote it verbatim
 - Output VALID JSON ONLY
 
 JSON FORMAT:

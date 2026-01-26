@@ -8,18 +8,28 @@ from mastodon_client import search_recent_posts
 from reply_generator import generate_replies
 from image_generator import ImageGenerator
 from telegram_client import wait_for_approval
+from knowledge_base import sync_notion_to_database
+from rag_database import init_database
 
 
-async def main(generate_image: bool = True, require_approval: bool = True):
+async def main(generate_image: bool = True, require_approval: bool = True, query: str = None):
     """
     Main function to generate and post content to Mastodon with Telegram HITL.
     
     Args:
         generate_image: Whether to generate and attach an image to the post
         require_approval: Whether to require Telegram approval before posting
+        query: Optional query for RAG retrieval (if None, uses general brand theme)
     """
-    docs = fetch_all_docs()
-    post = generate_post(docs)
+    # Initialize database and ensure knowledge base is synced
+    init_database()
+    # Note: In production, you might want to check if sync is needed
+    # For now, we'll assume the knowledge base is already synced
+    # Uncomment the line below to force a sync on each run:
+    # sync_notion_to_database(force_resync=False)
+    
+    # Generate post using RAG
+    post = generate_post(query=query)
     print("Generated Post:\n", post)
     
     image_url = None
@@ -72,14 +82,37 @@ async def main(generate_image: bool = True, require_approval: bool = True):
 
 
 def run_goal_4():
-    docs = fetch_all_docs()
-
+    """
+    Generate replies to recent Mastodon posts using RAG.
+    """
+    from rag_retriever import hybrid_search
+    
     posts = search_recent_posts(
         keyword="flowers",
         limit=5,
     )
-
-    replies = generate_replies(docs, posts)
+    
+    if not posts:
+        print("No posts found to reply to.")
+        return
+    
+    # Use RAG to retrieve relevant context for each post
+    # For simplicity, we'll use the first post's content as query
+    # In a more sophisticated implementation, you could generate queries per post
+    query = posts[0].get("content", "flowers")[:100] if posts else "flowers"
+    
+    # Retrieve relevant context using hybrid search (including stored posts)
+    retrieved_chunks = hybrid_search(query, top_k=5, include_posts=True)
+    
+    # Format context
+    if retrieved_chunks:
+        context_parts = [chunk.content for chunk in retrieved_chunks]
+        context = "\n\n---\n\n".join(context_parts)
+    else:
+        # Fallback to fetching all docs if no chunks found
+        context = fetch_all_docs()
+    
+    replies = generate_replies(context, posts)
 
     print("\n=== GENERATED REPLIES ===\n")
     for r in replies.replies:

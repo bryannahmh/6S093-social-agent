@@ -1,0 +1,8 @@
+python-dotenv
+requests
+pydantic
+openai
+replicate
+python-telegram-bot
+sentence-transformers
+numpy

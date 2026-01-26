@@ -72,13 +72,14 @@ def upload_media(image_url: str, description: Optional[str] = None) -> str:
     return media_data["id"]
 
 
-def post_status(text: str, media_ids: Optional[List[str]] = None):
+def post_status(text: str, media_ids: Optional[List[str]] = None, store_in_db: bool = True):
     """
     Post a status to Mastodon, optionally with images.
     
     Args:
         text: Status text content
         media_ids: Optional list of media IDs to attach (from upload_media)
+        store_in_db: Whether to store the post in SQLite database for RAG retrieval
     """
     url = f"{os.environ['MASTODON_BASE_URL']}/api/v1/statuses"
     headers = {
@@ -86,8 +87,9 @@ def post_status(text: str, media_ids: Optional[List[str]] = None):
     }
     
     # Build form data
+    post_text = text + "\n\n(AI-generated)"
     data = [
-        ("status", text + "\n\n(AI-generated)"),
+        ("status", post_text),
         ("visibility", "public"),
     ]
     
@@ -110,6 +112,37 @@ def post_status(text: str, media_ids: Optional[List[str]] = None):
         )
     
     response.raise_for_status()
+    
+    # Store post in database for RAG retrieval
+    if store_in_db:
+        try:
+            status_data = response.json()
+            mastodon_id = str(status_data.get("id", ""))
+            
+            if mastodon_id:
+                from rag_database import store_post
+                from embeddings import generate_embeddings, serialize_embedding
+                from rag_database import store_post_embedding
+                
+                # Store post
+                post_id = store_post(
+                    content=text,  # Store original text without "(AI-generated)" suffix
+                    mastodon_id=mastodon_id,
+                    metadata={
+                        "media_ids": media_ids or [],
+                        "visibility": "public",
+                        "url": status_data.get("url", "")
+                    }
+                )
+                
+                # Generate and store embedding
+                embedding = generate_embeddings(text)[0]
+                embedding_bytes = serialize_embedding(embedding)
+                store_post_embedding(post_id, embedding_bytes)
+                
+                print(f"Post stored in database (ID: {post_id}, Mastodon ID: {mastodon_id})")
+        except Exception as e:
+            print(f"Warning: Could not store post in database: {e}")
 
 def search_recent_posts(keyword: str, limit: int = 5):
     url = f"{os.environ['MASTODON_BASE_URL']}/api/v2/search"
